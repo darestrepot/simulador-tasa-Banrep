@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mercado de Reservas — BanrepCol · EAFIT</title>
+<style>
+  :root {
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    --font-serif: Georgia, serif;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 16px;
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f5f5f5;
+    --color-background-tertiary: #ececec;
+    --color-background-info: #e8f0fc;
+    --color-background-success: #e6f4ea;
+    --color-background-danger: #fce8e6;
+    --color-background-warning: #fef7e0;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #555555;
+    --color-text-tertiary: #888888;
+    --color-text-info: #1a56db;
+    --color-text-success: #137333;
+    --color-text-danger: #c5221f;
+    --color-text-warning: #b45309;
+    --color-border-tertiary: rgba(0,0,0,0.12);
+    --color-border-secondary: rgba(0,0,0,0.22);
+    --color-border-primary: rgba(0,0,0,0.35);
+    --color-border-info: #93b4f5;
+    --color-border-success: #81c995;
+    --color-border-danger: #f28b82;
+    --color-border-warning: #fdd663;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background-primary: #1e1e1e;
+      --color-background-secondary: #2a2a2a;
+      --color-background-tertiary: #242424;
+      --color-background-info: #1a2a4a;
+      --color-background-success: #1a3a24;
+      --color-background-danger: #3a1a1a;
+      --color-background-warning: #3a2a10;
+      --color-text-primary: #f0f0f0;
+      --color-text-secondary: #aaaaaa;
+      --color-text-tertiary: #777777;
+      --color-text-info: #7aadff;
+      --color-text-success: #57bb6e;
+      --color-text-danger: #f28b82;
+      --color-text-warning: #fdd663;
+      --color-border-tertiary: rgba(255,255,255,0.12);
+      --color-border-secondary: rgba(255,255,255,0.22);
+      --color-border-primary: rgba(255,255,255,0.35);
+      --color-border-info: #3a5a9a;
+      --color-border-success: #2a6a3a;
+      --color-border-danger: #6a2a2a;
+      --color-border-warning: #6a4a10;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--color-background-tertiary);
+         min-height: 100vh; padding: 20px; }
+  #root { max-width: 820px; margin: 0 auto; background: var(--color-background-primary);
+          border-radius: var(--border-radius-lg); padding: 24px;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  input[type=range] { height: 4px; }
+  button { font-family: var(--font-sans); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+
+const FIGS = [
+  {
+    id: 1,
+    titulo: "Figura 1: Equilibrio en el mercado de reservas",
+    descripcion: "El mercado de reservas bancarias determina la tasa de política (TdP) como la tasa interbancaria de equilibrio. La curva de oferta R\u02e2 tiene forma de L invertida: vertical en NBR (reservas no prestadas) y horizontal en i\u1d48 (tasa de descuento). La curva de demanda R\u1d48 es decreciente con un piso en i\u2092\u1d63 (tasa sobre reservas).",
+    controles: ["NBR", "id", "ior"],
+    escenario: "base",
+  },
+  {
+    id: 2,
+    titulo: "Figura 2: Respuesta a una operación de mercado abierto (compra)",
+    descripcion: "Una compra en el mercado abierto por parte de BanrepCol aumenta las reservas no prestadas (NBR), desplazando R\u02e2 hacia la derecha. Si el equilibrio está en la sección decreciente de R\u1d48, la TdP cae. Si ya está en el piso i\u2092\u1d63, la TdP no varía: es la trampa de liquidez.",
+    controles: ["NBR", "id", "ior", "compra"],
+    escenario: "oma",
+  },
+  {
+    id: 3,
+    titulo: "Figura 3: Respuesta a un cambio en la tasa de descuento",
+    descripcion: "BanrepCol puede cambiar su tasa de descuento i\u1d48 (ventanilla de crédito). Si no hay préstamos de ventanilla (BR=0), bajar i\u1d48 no afecta la TdP. Si hay préstamos (BR>0) y el equilibrio está en la sección horizontal de R\u02e2, bajar i\u1d48 sí reduce la TdP.",
+    controles: ["NBR", "id", "ior", "demandaFig3"],
+    escenario: "descuento",
+  },
+  {
+    id: 4,
+    titulo: "Figura 4: Respuesta a un cambio en el encaje requerido",
+    descripcion: "Un aumento en el encaje requerido eleva la demanda de reservas a cada nivel de tasa, desplazando R\u1d48 hacia la derecha. Esto presiona al alza la TdP. BanrepCol usa esta herramienta con menos frecuencia que las operaciones de mercado abierto.",
+    controles: ["NBR", "id", "ior", "encaje"],
+    escenario: "encaje",
+  },
+  {
+    id: 5,
+    titulo: "Figura 5: Respuesta a un cambio en la tasa sobre reservas (i\u2092\u1d63)",
+    descripcion: "La tasa sobre reservas i\u2092\u1d63 es el piso del corredor de tasas. Si la TdP está por encima del piso, subirlo no cambia la TdP (panel a). Si la TdP ya es igual al piso, subirlo eleva la TdP de forma directa (panel b). Este es el mecanismo central de política del corredor desde 2008.",
+    controles: ["NBR", "id", "ior"],
+    escenario: "ior",
+  },
+  {
+    id: 6,
+    titulo: "Figura 6: El corredor de tasas como ancla de política",
+    descripcion: "El corredor [i\u2092\u1d63, i\u1d48] limita las fluctuaciones de la TdP. Desplazamientos de R\u1d48 hacia la derecha elevan la TdP hasta el techo i\u1d48 (tasa de descuento). Desplazamientos hacia la izquierda la reducen hasta el piso i\u2092\u1d63. Este diseño aísla la TdP de shocks de demanda de reservas.",
+    controles: ["NBR", "id", "ior", "demanda"],
+    escenario: "corredor",
+  },
+];
+
+const W = 540, H = 400;
+const PAD = { top: 30, right: 60, bottom: 70, left: 65 };
+const CW = W - PAD.left - PAD.right;
+const CH = H - PAD.top - PAD.bottom;
+
+function toX(r, rMin, rMax) { return PAD.left + ((r - rMin) / (rMax - rMin)) * CW; }
+function toY(i, iMin, iMax) { return PAD.top + ((iMax - i) / (iMax - iMin)) * CH; }
+
+function calcEq(NBR, id, ior, demandaShift = 0) {
+  const iMin = 0, iMax = 10;
+  const rMin = 0, rMax = 20;
+  const NBRe = Math.min(Math.max(NBR, 2), 16);
+  const ide = Math.min(Math.max(id, 2), 9.5);
+  const iore = Math.min(Math.max(ior, 0.5), ide - 0.5);
+  const slope = -1.2;
+  const intercept = 8 + demandaShift;
+  // TdP en NBR según Rᵈ
+  const iff_at_NBR = Math.max(iore, Math.min(ide, intercept + slope * (NBRe - 8)));
+  // Si Rᵈ en NBR ya está por debajo de i_d, el equilibrio está en el tramo horizontal:
+  // resolvemos dónde Rᵈ cruza i_d → intercept + slope*(R-8) = ide → R = 8 + (ide-intercept)/slope
+  const R_at_id = 8 + (ide - intercept) / slope;
+  const onHorizontal = iff_at_NBR >= ide && R_at_id > NBRe && R_at_id <= rMax;
+  const iff_eq = onHorizontal ? ide : Math.min(ide, Math.max(iore, iff_at_NBR));
+  // BR endógeno: solo existe si el equilibrio está en el tramo horizontal
+  const BR = onHorizontal ? Math.max(0, R_at_id - NBRe) : 0;
+  const Req = onHorizontal ? R_at_id : NBRe;
+  return { NBRe, ide, iore, iff_eq, slope, intercept, iMin, iMax, rMin, rMax, BR, Req };
+}
+
+function GraficoMercado({ params, scenario, compra = 0, encajeShift = 0, demandaShift = 0, demandaFig3 = 0, showShifted = true }) {
+  const totalShift = encajeShift + demandaShift + demandaFig3;
+  const { NBRe, ide, iore, iff_eq, slope, intercept, iMin, iMax, rMin, rMax, Req } = calcEq(
+    params.NBR, params.id, params.ior, totalShift
+  );
+
+  const tx = (r) => toX(r, rMin, rMax);
+  const ty = (i) => toY(i, iMin, iMax);
+
+  const NBR2 = Math.min(NBRe + compra, 16);
+  const eq2 = calcEq(NBR2, params.id, params.ior, totalShift);
+
+  const supplyPath = (nbr, id_) => {
+    const x_nbr  = tx(nbr);
+    const y_id   = ty(id_);
+    const y_bot  = PAD.top + CH;        // base del eje Y
+    const x_right = tx(rMax) + 10;
+    // L invertida: vertical desde la base hasta i_d, luego horizontal a la derecha
+    return `M ${x_nbr} ${y_bot} L ${x_nbr} ${y_id} L ${x_right} ${y_id}`;
+  };
+
+  const demandPath = (intercept_, slope_, ior_, shift = 0) => {
+    const pts = [];
+    for (let r = rMin; r <= rMax; r += 0.2) {
+      const i = Math.max(ior_, intercept_ + slope_ * (r - 8) + shift);
+      if (i <= iMax + 0.1) pts.push(`${tx(r)},${ty(i)}`);
+    }
+    return pts.length > 1 ? `M ${pts.join(" L ")}` : "";
+  };
+
+  // Construir labels del eje Y evitando colisiones visuales
+  const atId   = Math.abs(iff_eq - ide)  < 0.05;   // TdP* coincide con techo
+  const atIor  = Math.abs(iff_eq - iore) < 0.05;   // TdP* coincide con piso
+  const eq2AtIor = compra > 0 && showShifted && eq2 && Math.abs(eq2.iff_eq - iore) < 0.05;
+  const eq2AtId  = compra > 0 && showShifted && eq2 && Math.abs(eq2.iff_eq - ide)  < 0.05;
+
+  const labels = [];
+  // i_d: si TdP* lo coincide, fusionar en label combinado
+  if (atId && !(compra > 0 && showShifted)) {
+    labels.push({ label: "TdP*= i_d", val: ide, color: "#A32D2D", bold: true });
+  } else {
+    labels.push({ label: "i_d", val: ide, color: "#185FA5" });
+  }
+  // i_or: si TdP* lo coincide, fusionar
+  if (atIor && !(compra > 0 && showShifted)) {
+    labels.push({ label: "TdP*= i_or", val: iore, color: "#A32D2D", bold: true });
+  } else {
+    labels.push({ label: "i_or", val: iore, color: "#0F6E56" });
+  }
+  // TdP* solo si no coincide con i_d ni i_or (ya se mostró fusionado)
+  if (compra > 0 && showShifted) {
+    // Pre-OMA: mostrar siempre aunque coincida con i_d o i_or
+    labels.push({ label: "TdP*", val: iff_eq, color: "#185FA5", bold: false, opacity: 0.5 });
+    // Post-OMA: mostrar con label especial si coincide con piso
+    if (eq2AtIor) {
+      labels.push({ label: "TdP₂= i_or", val: eq2.iff_eq, color: "#A32D2D", bold: true });
+    } else if (eq2AtId) {
+      labels.push({ label: "TdP₂= i_d", val: eq2.iff_eq, color: "#A32D2D", bold: true });
+    } else {
+      labels.push({ label: "TdP₂", val: eq2.iff_eq, color: "#A32D2D", bold: true });
+    }
+  } else if (!atId && !atIor) {
+    labels.push({ label: "TdP*", val: iff_eq, color: "#A32D2D", bold: true });
+  }
+
+  // Deduplicar por valor redondeado, guardando el primero de cada valor
+  const uniqueLabels = [];
+  const seen = new Set();
+  for (const l of labels) {
+    const key = l.val.toFixed(1);
+    if (!seen.has(key)) { seen.add(key); uniqueLabels.push(l); }
+  }
+
+  // NBR activo es el de la curva sólida (post-OMA si hay compra)
+  const NBRactivo = compra > 0 ? NBR2 : NBRe;
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ fontFamily: "var(--font-sans)", fontSize: 12 }}>
+      <defs>
+        <marker id="arrowB" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#185FA5" />
+        </marker>
+        <marker id="arrowR" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#A32D2D" />
+        </marker>
+      </defs>
+
+      <line x1={PAD.left} y1={PAD.top + CH} x2={PAD.left + CW + 10} y2={PAD.top + CH} stroke="#000000" strokeWidth={1.5} />
+
+      <text x={PAD.left / 2 - 8} y={PAD.top + CH / 2} textAnchor="middle"
+        transform={`rotate(-90, ${PAD.left / 2 - 8}, ${PAD.top + CH / 2})`}
+        fill="var(--color-text-primary)" fontSize={11}>Tasa de política (TdP)</text>
+      <text x={PAD.left + CW / 2} y={PAD.top + CH + 54} textAnchor="middle"
+        fill="var(--color-text-primary)" fontSize={11}>Cantidad de Reservas (R = NBR + BR)</text>
+
+      {[2, 4, 6, 8, 10].map(iv => (
+        <g key={iv}>
+          <line x1={PAD.left - 4} y1={ty(iv)} x2={PAD.left} y2={ty(iv)} stroke="var(--color-text-secondary)" strokeWidth={0.5} />
+          <text x={PAD.left - 7} y={ty(iv) + 4} textAnchor="end" fill="var(--color-text-secondary)" fontSize={10}>{iv}%</text>
+        </g>
+      ))}
+      {[4, 8, 12, 16].map(rv => (
+        <g key={rv}>
+          <line x1={tx(rv)} y1={PAD.top + CH} x2={tx(rv)} y2={PAD.top + CH + 5} stroke="var(--color-text-secondary)" strokeWidth={0.5} />
+          <text x={tx(rv)} y={PAD.top + CH + 18} textAnchor="middle" fill="var(--color-text-secondary)" fontSize={10}>{rv}</text>
+        </g>
+      ))}
+      {/* Etiqueta NBR original siempre; NBR₂ solo cuando hay compra */}
+      <text x={tx(NBRe)} y={PAD.top + CH + 34} textAnchor="middle" fill={compra > 0 ? "#185FA5" : "#185FA5"} fontSize={10} fontWeight={500}>{compra > 0 ? "NBR₁" : "NBR"}</text>
+      {compra > 0 && showShifted && (
+        <text x={tx(NBR2)} y={PAD.top + CH + 34} textAnchor="middle" fill="#BA7517" fontSize={10} fontWeight={500}>NBR₂</text>
+      )}
+
+      {/* Curvas de referencia punteadas */}
+      {compra > 0 && showShifted && (
+        <path d={supplyPath(NBRe, ide)} stroke="#185FA5" strokeWidth={1.5} fill="none" strokeDasharray="6,3" opacity={0.4} />
+      )}
+      {encajeShift !== 0 && showShifted && (
+        <path d={demandPath(8, slope, iore)} stroke="#0F6E56" strokeWidth={1.5} fill="none" strokeDasharray="5,3" opacity={0.4} />
+      )}
+      {demandaFig3 !== 0 && showShifted && scenario === "descuento" && (
+        <path d={demandPath(8, slope, iore)} stroke="#0F6E56" strokeWidth={1.5} fill="none" strokeDasharray="5,3" opacity={0.4} />
+      )}
+      {demandaShift !== 0 && showShifted && scenario === "corredor" && (
+        <path d={demandPath(8, slope, iore)} stroke="#0F6E56" strokeWidth={1.5} fill="none" strokeDasharray="4,3" opacity={0.4} />
+      )}
+
+      {/* Curvas activas */}
+      <path d={supplyPath(NBRactivo, ide)} stroke="#185FA5" strokeWidth={2.5} fill="none" />
+      <path d={demandPath(intercept, slope, iore)} stroke="#0F6E56" strokeWidth={2.5} fill="none" />
+
+      {/* Etiquetas de curvas */}
+      <text x={tx(rMax) + 14} y={ty(ide) + 4} fill="#185FA5" fontSize={11} fontWeight={500}>{compra > 0 ? "Rˢ₂" : "Rˢ"}</text>
+      {compra > 0 && showShifted && (
+        <text x={tx(NBRe) + 4} y={ty(ide) - 8} fill="#185FA5" fontSize={10} opacity={0.5}>Rˢ₁</text>
+      )}
+      <text x={tx(rMax) + 14} y={ty(Math.max(iore, intercept + slope * (rMax - 8))) + 4} fill="#0F6E56" fontSize={11} fontWeight={500}>Rᵈ</text>
+
+      {/* Punto de equilibrio: cuando hay OMA, punto original en gris, nuevo en rojo */}
+      {compra > 0 && showShifted ? (
+        <>
+          <circle cx={tx(Req)} cy={ty(iff_eq)} r={5} fill="#185FA5" opacity={0.35} />
+          <circle cx={tx(eq2.Req)} cy={ty(eq2.iff_eq)} r={5} fill="#A32D2D" />
+        </>
+      ) : (
+        <circle cx={tx(Req)} cy={ty(iff_eq)} r={5} fill="#A32D2D" />
+      )}
+
+      {/* Líneas horizontales de referencia: van hasta el punto de equilibrio activo */}
+      {uniqueLabels.map((l, i) => {
+        const xEnd = (compra > 0 && l.label.startsWith("TdP₂")) ? tx(eq2.Req)
+                   : (compra > 0 && l.label === "TdP*") ? tx(Req)
+                   : tx(Req);
+        return (
+          <g key={i}>
+            <line x1={PAD.left} y1={ty(l.val)} x2={xEnd} y2={ty(l.val)}
+              stroke={l.color} strokeWidth={1} strokeDasharray="4,3" />
+            <text x={PAD.left - 5} y={ty(l.val) + 4} textAnchor="end"
+              fill={l.color} fontSize={l.bold ? 11 : 10} fontWeight={l.bold ? 600 : 400}
+              opacity={l.opacity ?? 1}>{l.label}</text>
+          </g>
+        );
+      })}
+
+      {scenario === "corredor" && (
+        <>
+          <text x={PAD.left + 8} y={ty(ide) - 5} fill="#185FA5" fontSize={10} fontWeight={500}>Techo: i_d</text>
+          <text x={PAD.left + 8} y={ty(iore) - 5} fill="#0F6E56" fontSize={10} fontWeight={500}>Piso: i_or</text>
+        </>
+      )}
+
+      {/* Ejes en negro encima de todo */}
+      <line x1={PAD.left} y1={PAD.top} x2={PAD.left} y2={PAD.top + CH} stroke="#000000" strokeWidth={1.5} />
+      <line x1={PAD.left} y1={PAD.top + CH} x2={PAD.left + CW + 10} y2={PAD.top + CH} stroke="#000000" strokeWidth={1.5} />
+    </svg>
+  );
+}
+
+const QUIZ = {
+  1: [
+    { p: "¿Qué ocurre si las reservas del sistema están por encima del equilibrio?", opts: ["La TdP sube", "La TdP cae hacia TdP*", "BanrepCol sube el encaje", "La demanda se desplaza"], r: 1 },
+    { p: "¿Qué representa el tramo horizontal de Rˢ en el nivel i_d?", opts: ["El encaje mínimo", "El límite de reservas requeridas", "La ventanilla de descuento de BanrepCol", "La tasa interbancaria objetivo"], r: 2 },
+  ],
+  2: [
+    { p: "Una compra de mercado abierto (OMA) desplaza Rˢ hacia la...", opts: ["Izquierda, subiendo la TdP", "Derecha, bajando la TdP", "Derecha, subiendo i_d", "Izquierda, bajando i_or"], r: 1 },
+    { p: "¿Cuándo una OMA de compra NO reduce la TdP?", opts: ["Cuando NBR > 10", "Cuando el equilibrio está en el piso i_or", "Cuando i_d es muy alto", "Cuando la demanda es elástica"], r: 1 },
+  ],
+  3: [
+    { p: "Bajar i_d afecta la TdP solo si...", opts: ["BR = 0", "El equilibrio está en la sección vertical de Rˢ", "El equilibrio está en la sección horizontal de Rˢ (BR > 0)", "i_or > i_d"], r: 2 },
+    { p: "¿Qué es BR en este modelo?", opts: ["Reservas brutas", "Reservas prestadas vía ventanilla de descuento", "Bonos del Banco de la República", "Reservas bancarias requeridas"], r: 1 },
+  ],
+  4: [
+    { p: "Un aumento en el encaje requerido desplaza...", opts: ["Rˢ a la derecha", "Rˢ a la izquierda", "Rᵈ a la derecha", "Rᵈ a la izquierda"], r: 2 },
+    { p: "¿Cuál es el efecto sobre la TdP de un mayor encaje (todo lo demás constante)?", opts: ["La TdP cae", "La TdP no cambia", "La TdP sube", "La TdP se vuelve indeterminada"], r: 2 },
+  ],
+  5: [
+    { p: "Si la TdP ya está igual a i_or, ¿qué pasa cuando BanrepCol sube i_or?", opts: ["La TdP no cambia", "La TdP sube junto con i_or", "La TdP cae", "Rˢ se desplaza a la derecha"], r: 1 },
+    { p: "La tasa sobre reservas (i_or) es el... del corredor de tasas.", opts: ["Techo", "Pivote", "Piso", "Promedio"], r: 2 },
+  ],
+  6: [
+    { p: "¿Qué impide que la TdP supere i_d?", opts: ["Los bancos prefieren i_or", "Los bancos pueden pedir prestado en la ventanilla al costo i_d", "BanrepCol vende reservas al precio i_d", "El encaje requerido actúa como techo"], r: 1 },
+    { p: "¿Cuál es la ventaja del corredor de tasas para BanrepCol?", opts: ["Elimina la inflación", "Acota fluctuaciones de la TdP ante shocks de demanda de reservas", "Fija el tipo de cambio", "Eleva automáticamente las reservas"], r: 1 },
+  ],
+};
+
+const CAPTIONS = {
+  1: "Figura 1 – Equilibrio en el mercado de reservas: muestra cómo la intersección entre la curva de oferta Rˢ (L invertida: vertical en NBR y horizontal en i_d) y la curva de demanda Rᵈ (decreciente con piso en i_or) determina la tasa de política TdP*. Desde cualquier desequilibrio, el mercado converge al punto de equilibrio.",
+  2: "Figura 2 – Respuesta a una operación de mercado abierto (OMA) de compra: BanrepCol adquiere títulos, aumentando NBR y desplazando Rˢ hacia la derecha. Si el equilibrio está en la sección decreciente de Rᵈ, la TdP cae (panel a). Si ya está en el piso i_or, la TdP no varía — trampa de liquidez (panel b).",
+  3: "Figura 3 – Respuesta a un cambio en la tasa de descuento (i_d): bajar i_d desplaza hacia abajo el tramo horizontal de Rˢ. Sin préstamos de ventanilla (BR = 0) el equilibrio no se afecta (panel a). Con BR > 0 el equilibrio estaba en ese tramo horizontal y la TdP cae junto con i_d, aumentando los préstamos de ventanilla (panel b).",
+  4: "Figura 4 – Respuesta a un cambio en el encaje requerido: un mayor encaje eleva la demanda de reservas a cada nivel de tasa, desplazando Rᵈ hacia la derecha. Con Rˢ sin cambios, la TdP sube. BanrepCol emplea esta herramienta con menos frecuencia que las OMA.",
+  5: "Figura 5 – Respuesta a un cambio en la tasa sobre reservas (i_or): subir i_or eleva el piso de Rᵈ. Si la TdP ya supera i_or, el equilibrio no cambia (panel a). Si la TdP es igual a i_or, subirlo arrastra la TdP al alza (panel b). Este mecanismo es el eje del corredor de tasas moderno.",
+  6: "Figura 6 – El corredor de tasas como ancla de política: el intervalo [i_or, i_d] acota las fluctuaciones de la TdP independientemente de los shocks de demanda de reservas. Desplazamientos de Rᵈ a la derecha elevan la TdP hasta el techo i_d; a la izquierda la reducen hasta el piso i_or.",
+};
+
+function App() {
+  const [fig, setFig] = useState(0);
+  const [params, setParams] = useState({ NBR: 10, id: 7, ior: 2 });
+  const [compra, setCompra] = useState(0);
+  const [encajeShift, setEncajeShift] = useState(0);
+  const [demandaShift, setDemandaShift] = useState(0);
+  const [demandaFig3, setDemandaFig3] = useState(0);
+  const [quizIdx, setQuizIdx] = useState(0);
+  const [quizAns, setQuizAns] = useState(null);
+  const [score, setScore] = useState(0);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [tab, setTab] = useState("sim");
+
+  // Estado tablero libre
+  const [libre, setLibre] = useState({ NBR: 8, id: 7, ior: 2, demanda: 0 });
+  const [libreRef, setLibreRef] = useState({ NBR: 8, id: 7, ior: 2, demanda: 0 });
+  const [libreLog, setLibreLog] = useState([]);
+
+  const figura = FIGS[fig];
+  const qs = QUIZ[figura.id];
+  const q = qs[quizIdx % qs.length];
+
+  const totalDemShift = encajeShift + demandaShift + (figura.id === 3 ? demandaFig3 : 0);
+  const { iff_eq, ide, iore, NBRe, BR, Req } = calcEq(params.NBR, params.id, params.ior, totalDemShift);
+
+  const eq2 = compra > 0
+    ? calcEq(params.NBR + compra, params.id, params.ior, totalDemShift)
+    : null;
+
+  function resetExtras() {
+    setCompra(0); setEncajeShift(0); setDemandaShift(0); setDemandaFig3(0);
+    setQuizIdx(0); setQuizAns(null); setShowQuiz(false);
+  }
+
+  // Parámetros iniciales por figura
+  const INIT_PARAMS = {
+    1: { NBR: 10, id: 7,   ior: 2 },  // TdP=5.6%: equilibrio interior claro en sección decreciente
+    2: { NBR: 10, id: 7,   ior: 2 },  // panel (a): TdP=5.6%, OMA lo reducirá
+    3: { NBR: 10, id: 7,   ior: 2 },  // panel (a) default: BR=0; demandaFig3 activa panel (b)
+    4: { NBR: 10, id: 7,   ior: 2 },  // TdP=5.6%; encaje lo desplaza al alza
+    5: { NBR: 14, id: 7,   ior: 2 },  // NBR alto → TdP=i_or=2% (panel b); bajar NBR → panel (a)
+    6: { NBR: 10, id: 7,   ior: 2 },  // TdP=5.6%, centro del corredor [2%,7%]
+  };
+
+  function handleFig(i) {
+    setFig(i);
+    setParams(INIT_PARAMS[FIGS[i].id]);
+    resetExtras();
+  }
+
+  function handleParam(k, v) {
+    setParams(p => {
+      const np = { ...p, [k]: parseFloat(v) };
+      if (k === "id" && np.ior >= np.id) np.ior = np.id - 0.5;
+      if (k === "ior" && np.ior >= np.id) np.id = np.ior + 0.5;
+      return np;
+    });
+  }
+
+  function handleQuiz(i) {
+    setQuizAns(i);
+    if (i === q.r) setScore(s => s + 1);
+  }
+
+  function nextQ() { setQuizIdx(x => x + 1); setQuizAns(null); }
+
+  const interpretacion = () => {
+    const tdp = iff_eq.toFixed(2);
+    const tdp2 = eq2 ? eq2.iff_eq.toFixed(2) : null;
+    const atFloor = Math.abs(iff_eq - iore) < 0.05;
+    const atCeiling = Math.abs(iff_eq - ide) < 0.05;
+    switch (figura.id) {
+      case 1: return atFloor
+        ? `El sistema está en el piso: TdP = i_or = ${iore}%. Las OMA adicionales no reducirán más la tasa.`
+        : atCeiling
+          ? `El sistema está en el techo: TdP = i_d = ${ide}%. Las reservas son escasas.`
+          : `Equilibrio en la sección normal: TdP* = ${tdp}%. BanrepCol controla la tasa ajustando NBR.`;
+      case 2: {
+        if (compra === 0) return atFloor
+          ? `TdP = i_or = ${iore}% (piso activo). Sube el slider de compra: ilustrarás el panel (b) — la OMA no reducirá la TdP.`
+          : `TdP = ${tdp}% en sección decreciente de Rᵈ. Sube el slider de compra: ilustrarás el panel (a) — la OMA reducirá la TdP.`;
+        const atFloor2 = eq2 && Math.abs(eq2.iff_eq - iore) < 0.05;
+        return atFloor2
+          ? `Panel (b) — trampa de liquidez: +${compra} B desplazó Rˢ₁→Rˢ₂ pero TdP sigue en el piso i_or = ${iore}%. OMA inefectiva.`
+          : `Panel (a): +${compra} B desplazó Rˢ₁→Rˢ₂. TdP cayó de ${tdp}% a ${eq2 ? eq2.iff_eq.toFixed(2) : ""}%.`;
+      }
+      case 3: {
+        if (BR === 0) return `Sin préstamos de ventanilla (BR = 0): equilibrio en el tramo vertical de Rˢ, TdP = ${tdp}% < i_d = ${ide}%. Bajar i_d no afecta la TdP. (Panel a)`;
+        if (demandaFig3 === 0) return `Atención: i_d bajó por debajo de la TdP de equilibrio, generando BR = ${BR.toFixed(2)} B. Para ilustrar el panel (b) correctamente, sube el slider de posición de Rᵈ y luego baja i_d.`;
+        return `Panel (b) — BR endógeno = ${BR.toFixed(2)} B: Rᵈ cruza el tramo horizontal de Rˢ en i_d = ${ide}%. TdP sigue a i_d directamente. Bajar i_d reduce la TdP.`;
+      }
+      case 4: {
+        if (encajeShift === 0) return `Sin cambio en encaje. TdP = ${tdp}%. Mueve el slider: derecha sube encaje (TdP↑), izquierda lo reduce (TdP↓).`;
+        if (encajeShift < 0) return `Reducción de encaje: Rᵈ se desplazó a la izquierda. TdP bajó a ${tdp}% — los bancos necesitan menos reservas.`;
+        if (BR > 0) return `Encaje alto: Rᵈ desplazó hasta activar ventanilla (BR = ${BR.toFixed(2)} B). TdP = i_d = ${ide}%. Demanda superó NBR.`;
+        return `Mayor encaje desplazó Rᵈ a la derecha: TdP subió a ${tdp}% (sección decreciente de Rᵈ).`;
+      }
+      case 5: return atFloor
+        ? `Panel (b): TdP = i_or = ${iore}% — el piso es la restricción activa. Subir i_or eleva la TdP directamente.`
+        : `Panel (a): TdP = ${tdp}% > i_or = ${iore}%. Subir i_or no cambia la TdP a menos que alcance ${tdp}%. Sube NBR para bajar la TdP hasta el piso y pasar al panel (b).`;
+      case 6: return atFloor
+        ? `Rᵈ se desplazó a la izquierda: la TdP tocó el piso i_or = ${iore}%. El corredor está activo.`
+        : atCeiling
+          ? `Rᵈ se desplazó a la derecha: la TdP tocó el techo i_d = ${ide}% (BR = ${BR.toFixed(2)} B). Los bancos cubren el exceso de demanda en la ventanilla de BanrepCol.`
+          : `TdP = ${tdp}%, dentro del corredor [${iore}%, ${ide}%]. BanrepCol mantiene el anclaje.`;
+      default: return "";
+    }
+  };
+
+  const sliderStyle = { width: "100%", accentColor: "#185FA5" };
+  const tabBtn = (t, label) => ({
+    padding: "6px 16px",
+    borderRadius: "var(--border-radius-md)",
+    border: "0.5px solid var(--color-border-secondary)",
+    background: tab === t ? "var(--color-background-info)" : "var(--color-background-primary)",
+    color: tab === t ? "var(--color-text-info)" : "var(--color-text-secondary)",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: tab === t ? 500 : 400,
+  });
+
+  return (
+    <div style={{ padding: "1rem 0", maxWidth: 760, margin: "0 auto" }}>
+      <h2 style={{ fontSize: 16, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 4 }}>
+        Mercado de Reservas — BanrepCol
+      </h2>
+      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14 }}>
+        Simulador interactivo · Economía Financiera · Universidad EAFIT
+      </p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+        {FIGS.map((f, i) => (
+          <button key={f.id} onClick={() => { handleFig(i); setTab("sim"); }} style={{
+            padding: "5px 12px",
+            borderRadius: "var(--border-radius-md)",
+            border: "0.5px solid var(--color-border-secondary)",
+            background: fig === i && tab !== "libre" ? "#185FA5" : "var(--color-background-primary)",
+            color: fig === i && tab !== "libre" ? "#fff" : "var(--color-text-secondary)",
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: fig === i && tab !== "libre" ? 500 : 400,
+          }}>Fig. {f.id}</button>
+        ))}
+        <button onClick={() => setTab("libre")} style={{
+          padding: "5px 12px",
+          borderRadius: "var(--border-radius-md)",
+          border: "0.5px solid var(--color-border-secondary)",
+          background: tab === "libre" ? "#185FA5" : "var(--color-background-primary)",
+          color: tab === "libre" ? "#fff" : "var(--color-text-secondary)",
+          cursor: "pointer",
+          fontSize: 12,
+          fontWeight: tab === "libre" ? 500 : 400,
+        }}>Tablero libre</button>
+      </div>
+
+      {tab !== "libre" && (
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button style={tabBtn("sim", "Simulador")} onClick={() => setTab("sim")}>Simulador</button>
+        <button style={tabBtn("quiz", "Quiz")} onClick={() => setTab("quiz")}>Quiz</button>
+        <button style={tabBtn("info", "Concepto")} onClick={() => setTab("info")}>Concepto</button>
+      </div>
+      )}
+
+      {tab === "sim" && (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,220px)", gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 8 }}>
+              {figura.titulo}
+            </p>
+            <GraficoMercado params={params} scenario={figura.escenario}
+              compra={compra} encajeShift={encajeShift} demandaShift={demandaShift}
+              demandaFig3={demandaFig3} />
+            <p style={{
+              marginTop: 8, marginBottom: 10,
+              fontSize: 11.5, color: "var(--color-text-secondary)",
+              lineHeight: 1.65, fontStyle: "italic",
+              borderTop: "0.5px solid var(--color-border-tertiary)",
+              paddingTop: 8,
+            }}>
+              {CAPTIONS[figura.id]}
+            </p>
+            <div style={{
+              marginTop: 2, padding: "10px 12px",
+              background: "var(--color-background-info)",
+              borderRadius: "var(--border-radius-md)",
+              borderLeft: "3px solid var(--color-border-info)"
+            }}>
+              <p style={{ fontSize: 12, color: "var(--color-text-info)", margin: 0, lineHeight: 1.6 }}>
+                {interpretacion()}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{
+              background: "var(--color-background-secondary)",
+              borderRadius: "var(--border-radius-lg)",
+              border: "0.5px solid var(--color-border-tertiary)",
+              padding: "12px 14px"
+            }}>
+              <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Instrumentos de política
+              </p>
+
+              {figura.controles.includes("NBR") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>NBR (reservas no prestadas)</span>
+                    <span style={{ fontWeight: 500, color: "#185FA5" }}>{params.NBR.toFixed(1)} B</span>
+                  </div>
+                  <input type="range" min={2} max={16} step={0.5} value={params.NBR}
+                    onChange={e => handleParam("NBR", e.target.value)} style={sliderStyle} />
+                </div>
+              )}
+
+              {figura.controles.includes("id") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>Tasa de descuento (i_d)</span>
+                    <span style={{ fontWeight: 500, color: "#185FA5" }}>{params.id.toFixed(1)}%</span>
+                  </div>
+                  <input type="range" min={2} max={9.5} step={0.5} value={params.id}
+                    onChange={e => handleParam("id", e.target.value)} style={sliderStyle} />
+                </div>
+              )}
+
+              {figura.controles.includes("ior") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>Tasa sobre reservas (i_or)</span>
+                    <span style={{ fontWeight: 500, color: "#0F6E56" }}>{params.ior.toFixed(1)}%</span>
+                  </div>
+                  <input type="range" min={0.5} max={params.id - 0.5} step={0.5} value={params.ior}
+                    onChange={e => handleParam("ior", e.target.value)} style={sliderStyle} />
+                </div>
+              )}
+
+              {figura.controles.includes("compra") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>OMA — compra (∆NBR)</span>
+                    <span style={{ fontWeight: 500, color: "#BA7517" }}>+{compra.toFixed(1)} B</span>
+                  </div>
+                  <input type="range" min={0} max={6} step={0.5} value={compra}
+                    onChange={e => setCompra(parseFloat(e.target.value))} style={{ ...sliderStyle, accentColor: "#BA7517" }} />
+                </div>
+              )}
+
+              {figura.controles.includes("demandaFig3") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>Posición de Rᵈ (demanda de reservas)</span>
+                    <span style={{ fontWeight: 500, color: "#BA7517" }}>
+                      {demandaFig3 >= 0 ? "+" : ""}{demandaFig3.toFixed(1)}
+                    </span>
+                  </div>
+                  <input type="range" min={-3} max={3} step={0.5} value={demandaFig3}
+                    onChange={e => setDemandaFig3(parseFloat(e.target.value))}
+                    style={{ ...sliderStyle, accentColor: "#BA7517" }} />
+                  <p style={{ fontSize: 10, color: "var(--color-text-secondary)", marginTop: 3, marginBottom: 0 }}>
+                    Panel (a): BR=0 cuando Rᵈ cruza el tramo vertical · Panel (b): BR>0 cuando Rᵈ cruza el tramo horizontal en i_d
+                  </p>
+                </div>
+              )}
+
+              {figura.controles.includes("encaje") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>Encaje requerido (∆Rᵈ)</span>
+                    <span style={{ fontWeight: 500, color: encajeShift >= 0 ? "#BA7517" : "#0F6E56" }}>{encajeShift >= 0 ? "+" : ""}{encajeShift.toFixed(1)}</span>
+                  </div>
+                  <input type="range" min={-2} max={3} step={0.5} value={encajeShift}
+                    onChange={e => setEncajeShift(parseFloat(e.target.value))} style={{ ...sliderStyle, accentColor: "#BA7517" }} />
+                </div>
+              )}
+
+              {figura.controles.includes("demanda") && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                    <span>Shock de demanda (∆Rᵈ)</span>
+                    <span style={{ fontWeight: 500, color: demandaShift >= 0 ? "#A32D2D" : "#0F6E56" }}>
+                      {demandaShift >= 0 ? "+" : ""}{demandaShift.toFixed(1)}
+                    </span>
+                  </div>
+                  <input type="range" min={-3} max={3} step={0.5} value={demandaShift}
+                    onChange={e => setDemandaShift(parseFloat(e.target.value))} style={{ ...sliderStyle, accentColor: "#A32D2D" }} />
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setParams(INIT_PARAMS[figura.id]);
+                  resetExtras();
+                }}
+                style={{
+                  width: "100%", marginTop: 4,
+                  padding: "7px 0",
+                  borderRadius: "var(--border-radius-md)",
+                  border: "0.5px solid var(--color-border-secondary)",
+                  background: "var(--color-background-primary)",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer", fontSize: 12,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}
+                onMouseOver={e => e.currentTarget.style.background = "var(--color-background-secondary)"}
+                onMouseOut={e => e.currentTarget.style.background = "var(--color-background-primary)"}
+              >
+                ↺ Resetear figura
+              </button>
+            </div>
+
+            <div style={{
+              background: "var(--color-background-secondary)",
+              borderRadius: "var(--border-radius-md)",
+              border: "0.5px solid var(--color-border-tertiary)",
+              padding: "10px 14px"
+            }}>
+              <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Resultado
+              </p>
+              {[
+                { label: "TdP*", val: `${iff_eq.toFixed(2)}%`, color: "#A32D2D" },
+                { label: "i_d (techo)", val: `${ide.toFixed(1)}%`, color: "#185FA5" },
+                { label: "i_or (piso)", val: `${iore.toFixed(1)}%`, color: "#0F6E56" },
+                ...(figura.id === 3 ? [{ label: "BR (endógeno)", val: `${BR.toFixed(2)} B`, color: BR > 0 ? "#BA7517" : "var(--color-text-secondary)" }] : []),
+                ...(eq2 ? [{ label: "TdP₂ (post-OMA)", val: `${eq2.iff_eq.toFixed(2)}%`, color: "#BA7517" }] : []),
+              ].map(r => (
+                <div key={r.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+                  <span style={{ color: "var(--color-text-secondary)" }}>{r.label}</span>
+                  <span style={{ fontWeight: 500, color: r.color }}>{r.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "quiz" && (
+        <div style={{
+          background: "var(--color-background-secondary)",
+          borderRadius: "var(--border-radius-lg)",
+          border: "0.5px solid var(--color-border-tertiary)",
+          padding: "16px 20px", maxWidth: 560
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 12, color: "var(--color-text-secondary)" }}>
+            <span>Figura {figura.id} · Pregunta {(quizIdx % qs.length) + 1} de {qs.length}</span>
+            <span style={{ fontWeight: 500, color: "#185FA5" }}>Puntaje: {score}</span>
+          </div>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 14, lineHeight: 1.6 }}>{q.p}</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {q.opts.map((opt, i) => {
+              const answered = quizAns !== null;
+              const correct = i === q.r;
+              const chosen = i === quizAns;
+              let bg = "var(--color-background-primary)";
+              let border = "var(--color-border-tertiary)";
+              let color = "var(--color-text-primary)";
+              if (answered && correct) { bg = "var(--color-background-success)"; border = "var(--color-border-success)"; color = "var(--color-text-success)"; }
+              if (answered && chosen && !correct) { bg = "var(--color-background-danger)"; border = "var(--color-border-danger)"; color = "var(--color-text-danger)"; }
+              return (
+                <button key={i} disabled={answered} onClick={() => handleQuiz(i)} style={{
+                  padding: "10px 14px", borderRadius: "var(--border-radius-md)",
+                  border: `0.5px solid ${border}`, background: bg, color, textAlign: "left",
+                  cursor: answered ? "default" : "pointer", fontSize: 13, lineHeight: 1.5
+                }}>{opt}</button>
+              );
+            })}
+          </div>
+          {quizAns !== null && (
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={nextQ} style={{
+                padding: "7px 18px", borderRadius: "var(--border-radius-md)",
+                border: "0.5px solid #185FA5", background: "#185FA5", color: "#fff",
+                cursor: "pointer", fontSize: 13
+              }}>Siguiente →</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "libre" && (() => {
+        const eqL    = calcEq(libre.NBR, libre.id, libre.ior, libre.demanda);
+        const eqRef  = calcEq(libreRef.NBR, libreRef.id, libreRef.ior, libreRef.demanda);
+        const hasRef = JSON.stringify(libre) !== JSON.stringify(libreRef);
+
+        const slL = { width: "100%", accentColor: "#185FA5" };
+
+        function cambiarLibre(k, v) {
+          const val = parseFloat(v);
+          setLibre(prev => {
+            const next = { ...prev, [k]: val };
+            if (k === "id" && next.ior >= next.id) next.ior = next.id - 0.5;
+            if (k === "ior" && next.ior >= next.id) next.id = next.ior + 0.5;
+            return next;
+          });
+        }
+
+        function confirmarCambio(k, v) {
+          const val = parseFloat(v);
+          const prev = libreRef[k];
+          if (Math.abs(val - prev) < 0.01) return;
+          const tdpAntes = eqRef.iff_eq.toFixed(2);
+          const tdpDespues = calcEq(
+            k === "NBR" ? val : libre.NBR,
+            k === "id"  ? val : libre.id,
+            k === "ior" ? val : libre.ior,
+            k === "demanda" ? val : libre.demanda
+          ).iff_eq.toFixed(2);
+          const labels = { NBR: "NBR", id: "i_d", ior: "i_or", demanda: "ΔRᵈ" };
+          const dir = val > prev ? "↑" : "↓";
+          const entrada = `${dir} ${labels[k]}: ${prev.toFixed(1)} → ${val.toFixed(1)} · TdP: ${tdpAntes}% → ${tdpDespues}%`;
+          setLibreLog(lg => [entrada, ...lg].slice(0, 8));
+          setLibreRef(r => ({ ...r, [k]: val }));
+        }
+
+        // Paths para gráfico libre
+        const iMin = 0, iMax = 10, rMin = 0, rMax = 20;
+        const txL = r => toX(r, rMin, rMax);
+        const tyL = i => toY(i, iMin, iMax);
+        const slope = -1.2;
+
+        const supL = (nbr, id_) => {
+          const xn = txL(nbr), yid = tyL(id_), ybot = PAD.top + CH, xr = txL(rMax) + 10;
+          return `M ${xn} ${ybot} L ${xn} ${yid} L ${xr} ${yid}`;
+        };
+        const demL = (intercept_, ior_) => {
+          const pts = [];
+          for (let r = rMin; r <= rMax; r += 0.2) {
+            const i = Math.max(ior_, Math.min(iMax, intercept_ + slope * (r - 8)));
+            if (i <= iMax + 0.1) pts.push(`${txL(r)},${tyL(i)}`);
+          }
+          return pts.length > 1 ? `M ${pts.join(" L ")}` : "";
+        };
+
+        const intL    = 8 + libre.demanda;
+        const intRef  = 8 + libreRef.demanda;
+
+        // Sombreado del corredor
+        const yTecho = tyL(eqL.ide);
+        const yPiso  = tyL(eqL.iore);
+        const xIzq   = PAD.left;
+        const xDer   = txL(rMax) + 10;
+
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,230px)", gap: 16 }}>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 8 }}>
+                Tablero libre — todos los instrumentos activos
+              </p>
+
+              <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ fontFamily: "var(--font-sans)", fontSize: 12 }}>
+                {/* Corredor sombreado */}
+                <rect x={xIzq} y={yTecho} width={xDer - xIzq} height={yPiso - yTecho}
+                  fill="#185FA5" opacity={0.06} />
+
+                {/* Curvas de referencia punteadas */}
+                {hasRef && (
+                  <>
+                    <path d={supL(libreRef.NBR, libreRef.id)} stroke="#185FA5" strokeWidth={1.5} fill="none" strokeDasharray="5,3" opacity={0.35} />
+                    <path d={demL(intRef, libreRef.ior)} stroke="#0F6E56" strokeWidth={1.5} fill="none" strokeDasharray="5,3" opacity={0.35} />
+                  </>
+                )}
+
+                {/* Curvas activas */}
+                <path d={supL(libre.NBR, libre.id)} stroke="#185FA5" strokeWidth={2.5} fill="none" />
+                <path d={demL(intL, libre.ior)} stroke="#0F6E56" strokeWidth={2.5} fill="none" />
+
+                {/* Punto de equilibrio */}
+                <circle cx={txL(eqL.Req)} cy={tyL(eqL.iff_eq)} r={5} fill="#A32D2D" />
+                {hasRef && (
+                  <circle cx={txL(eqRef.Req)} cy={tyL(eqRef.iff_eq)} r={4} fill="#A32D2D" opacity={0.3} />
+                )}
+
+                {/* Línea horizontal TdP* */}
+                <line x1={PAD.left} y1={tyL(eqL.iff_eq)} x2={txL(eqL.Req)} y2={tyL(eqL.iff_eq)}
+                  stroke="#A32D2D" strokeWidth={1} strokeDasharray="4,3" />
+                <text x={PAD.left - 7} y={tyL(eqL.iff_eq) + 4} textAnchor="end"
+                  fill="#A32D2D" fontSize={10} fontWeight={500}>TdP*</text>
+
+                {/* Labels i_d e i_or */}
+                <line x1={PAD.left} y1={tyL(eqL.ide)} x2={txL(libre.NBR)} y2={tyL(eqL.ide)}
+                  stroke="#185FA5" strokeWidth={0.8} strokeDasharray="3,3" opacity={0.6} />
+                <text x={PAD.left - 7} y={tyL(eqL.ide) + 4} textAnchor="end" fill="#185FA5" fontSize={9}>i_d</text>
+                <line x1={PAD.left} y1={tyL(eqL.iore)} x2={txL(rMax) + 10} y2={tyL(eqL.iore)}
+                  stroke="#0F6E56" strokeWidth={0.8} strokeDasharray="3,3" opacity={0.6} />
+                <text x={PAD.left - 7} y={tyL(eqL.iore) + 4} textAnchor="end" fill="#0F6E56" fontSize={9}>i_or</text>
+
+                {/* Etiquetas curvas */}
+                <text x={txL(rMax) + 14} y={tyL(eqL.ide) + 4} fill="#185FA5" fontSize={11} fontWeight={500}>Rˢ</text>
+                <text x={txL(rMax) + 14} y={tyL(Math.max(eqL.iore, intL + slope * (rMax - 8))) + 4} fill="#0F6E56" fontSize={11} fontWeight={500}>Rᵈ</text>
+
+                {/* Ticks eje Y */}
+                {[2, 4, 6, 8, 10].map(iv => (
+                  <g key={iv}>
+                    <line x1={PAD.left - 4} y1={tyL(iv)} x2={PAD.left} y2={tyL(iv)} stroke="#555" strokeWidth={0.5} />
+                    <text x={PAD.left - 7} y={tyL(iv) + 4} textAnchor="end" fill="#555" fontSize={10}>{iv}%</text>
+                  </g>
+                ))}
+                {/* Ticks eje X */}
+                {[4, 8, 12, 16].map(rv => (
+                  <g key={rv}>
+                    <line x1={txL(rv)} y1={PAD.top + CH} x2={txL(rv)} y2={PAD.top + CH + 5} stroke="#555" strokeWidth={0.5} />
+                    <text x={txL(rv)} y={PAD.top + CH + 18} textAnchor="middle" fill="#555" fontSize={10}>{rv}</text>
+                  </g>
+                ))}
+                <text x={txL(libre.NBR)} y={PAD.top + CH + 34} textAnchor="middle" fill="#185FA5" fontSize={10} fontWeight={500}>NBR</text>
+
+                {/* Títulos ejes */}
+                <text x={PAD.left / 2 - 8} y={PAD.top + CH / 2} textAnchor="middle"
+                  transform={`rotate(-90, ${PAD.left / 2 - 8}, ${PAD.top + CH / 2})`}
+                  fill="#333" fontSize={11}>Tasa de política (TdP)</text>
+                <text x={PAD.left + CW / 2} y={PAD.top + CH + 54} textAnchor="middle"
+                  fill="#333" fontSize={11}>Cantidad de Reservas (R = NBR + BR)</text>
+
+                {/* Ejes en negro encima de todo */}
+                <line x1={PAD.left} y1={PAD.top} x2={PAD.left} y2={PAD.top + CH} stroke="#000" strokeWidth={1.5} />
+                <line x1={PAD.left} y1={PAD.top + CH} x2={PAD.left + CW + 10} y2={PAD.top + CH} stroke="#000" strokeWidth={1.5} />
+              </svg>
+
+              {/* Log de historia */}
+              <div style={{ marginTop: 10, borderTop: "0.5px solid var(--color-border-tertiary)", paddingTop: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                  Historia de política
+                </p>
+                {libreLog.length === 0
+                  ? <p style={{ fontSize: 11, color: "var(--color-text-secondary)", fontStyle: "italic" }}>Mueve cualquier slider para registrar cambios.</p>
+                  : libreLog.map((entry, i) => (
+                    <div key={i} style={{ fontSize: 11, color: i === 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)", padding: "2px 0", borderBottom: "0.5px solid var(--color-border-tertiary)", opacity: 1 - i * 0.1 }}>
+                      {entry}
+                    </div>
+                  ))
+                }
+                {libreLog.length > 0 && (
+                  <button onClick={() => { setLibreLog([]); setLibreRef({ ...libre }); }}
+                    style={{ marginTop: 6, fontSize: 11, color: "#A32D2D", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    Limpiar historial
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Panel derecho: sliders + resultados */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-lg)", border: "0.5px solid var(--color-border-tertiary)", padding: "12px 14px" }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Todos los instrumentos
+                </p>
+
+                {[
+                  { k: "NBR", label: "NBR (operaciones de mercado abierto)", min: 2, max: 16, step: 0.5, color: "#185FA5", fmt: v => `${v.toFixed(1)} B` },
+                  { k: "id",  label: "Tasa de descuento i_d (techo)",        min: 2, max: 9.5, step: 0.5, color: "#185FA5", fmt: v => `${v.toFixed(1)}%` },
+                  { k: "ior", label: "Tasa sobre reservas i_or (piso)",       min: 0.5, max: libre.id - 0.5, step: 0.5, color: "#0F6E56", fmt: v => `${v.toFixed(1)}%` },
+                  { k: "demanda", label: "Demanda de reservas ΔRᵈ (encaje / shock)", min: -3, max: 3, step: 0.5, color: "#BA7517", fmt: v => `${v >= 0 ? "+" : ""}${v.toFixed(1)}` },
+                ].map(({ k, label, min, max, step, color, fmt }) => (
+                  <div key={k} style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                      <span>{label}</span>
+                      <span style={{ fontWeight: 500, color }}>{fmt(libre[k])}</span>
+                    </div>
+                    <input type="range" min={min} max={max} step={step} value={libre[k]}
+                      onChange={e => cambiarLibre(k, e.target.value)}
+                      onMouseUp={e => confirmarCambio(k, e.target.value)}
+                      onTouchEnd={e => confirmarCambio(k, e.target.value)}
+                      style={{ width: "100%", accentColor: color }} />
+                  </div>
+                ))}
+
+                <button onClick={() => {
+                  const init = { NBR: 8, id: 7, ior: 2, demanda: 0 };
+                  setLibre(init); setLibreRef(init); setLibreLog([]);
+                }} style={{ fontSize: 11, color: "var(--color-text-secondary)", background: "none", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-md)", padding: "4px 10px", cursor: "pointer", width: "100%" }}>
+                  Restablecer valores
+                </button>
+              </div>
+
+              <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-tertiary)", padding: "10px 14px" }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resultado</p>
+                {[
+                  { label: "TdP*", val: `${eqL.iff_eq.toFixed(2)}%`, color: "#A32D2D" },
+                  { label: "i_d (techo)", val: `${eqL.ide.toFixed(1)}%`, color: "#185FA5" },
+                  { label: "i_or (piso)", val: `${eqL.iore.toFixed(1)}%`, color: "#0F6E56" },
+                  { label: "BR (endógeno)", val: `${eqL.BR.toFixed(2)} B`, color: eqL.BR > 0 ? "#BA7517" : "var(--color-text-secondary)" },
+                  { label: "Corredor", val: `[${eqL.iore.toFixed(1)}%, ${eqL.ide.toFixed(1)}%]`, color: "var(--color-text-secondary)" },
+                ].map(r => (
+                  <div key={r.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
+                    <span style={{ color: "var(--color-text-secondary)" }}>{r.label}</span>
+                    <span style={{ fontWeight: 500, color: r.color }}>{r.val}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-tertiary)", padding: "10px 14px" }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Diagnóstico</p>
+                <p style={{ fontSize: 11, color: "var(--color-text-primary)", lineHeight: 1.7, margin: 0 }}>
+                  {eqL.BR > 0
+                    ? `Equilibrio en ventanilla: TdP anclada a i_d = ${eqL.ide.toFixed(1)}%. BR = ${eqL.BR.toFixed(2)} B. Bajar i_d reduce la TdP.`
+                    : Math.abs(eqL.iff_eq - eqL.iore) < 0.15
+                      ? `Equilibrio en el piso: TdP = i_or = ${eqL.iore.toFixed(1)}%. OMA adicionales no reducen más la tasa.`
+                      : `Equilibrio normal: TdP* = ${eqL.iff_eq.toFixed(2)}%, dentro del corredor [${eqL.iore.toFixed(1)}%, ${eqL.ide.toFixed(1)}%]. BanrepCol controla la tasa vía NBR.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {tab === "info" && (
+        <div style={{ maxWidth: 560 }}>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 8 }}>{figura.titulo}</p>
+          <p style={{ fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.8, marginBottom: 16 }}>{figura.descripcion}</p>
+          <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "12px 14px", border: "0.5px solid var(--color-border-tertiary)" }}>
+            <p style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 8 }}>Leyenda</p>
+            {[
+              ["TdP*", "Tasa de política interbancaria de equilibrio"],
+              ["Rˢ", "Curva de oferta de reservas (BanrepCol)"],
+              ["Rᵈ", "Curva de demanda de reservas (bancos comerciales)"],
+              ["NBR", "Reservas no prestadas (nonborrowed reserves)"],
+              ["BR", "Reservas prestadas vía ventanilla de descuento"],
+              ["i_d", "Tasa de descuento (techo del corredor)"],
+              ["i_or", "Tasa sobre reservas (piso del corredor)"],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: "flex", gap: 8, padding: "4px 0", borderBottom: "0.5px solid var(--color-border-tertiary)", fontSize: 12 }}>
+                <span style={{ fontWeight: 500, color: "#185FA5", minWidth: 50 }}>{k}</span>
+                <span style={{ color: "var(--color-text-secondary)" }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <button style={{
+            marginTop: 14, padding: "8px 18px", borderRadius: "var(--border-radius-md)",
+            border: "0.5px solid #185FA5", background: "transparent", color: "#185FA5",
+            cursor: "pointer", fontSize: 13
+          }} onClick={() => sendPrompt(`Explica la Figura ${figura.id} del mercado de reservas de BanrepCol con más detalle, incluyendo implicaciones de política monetaria para Colombia. ↗`)}>
+            Profundizar con Claude ↗
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
